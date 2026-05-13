@@ -125,103 +125,29 @@ UWP is external to our GCP setup, so you need a service account to access BigQue
 
 ---
 
-**List existing UWP service accounts:**
+**Isolate your data for your dataproduct in one dataset in BigQuery**
 
-⌨️ CLI:
-```bash
-gcloud iam service-accounts list \
-  --project=reporting-224812 \
-  --filter="email:uwp OR displayName:uwp" \
-  --format="table(email, displayName, disabled)"
-```
+- UWP service accounts (SA) will be scoped to ONE dataset in the reporting project.
+- Accounts will get privileges for specific tables within that dataset.
+- SA are created for dev/test/prod environments. Make sure datasets exist in all environments, otherways SA creation will fail.
 
-🖱️ UI: GCP console (reporting project) > **IAM & Admin** > **Service Accounts** — search for `uwp` in the filter bar.
+**Configure SA in Terraform**
 
----
-
-**Get details for an account:**
-
-⌨️ CLI:
-```bash
-gcloud iam service-accounts describe \
-  "uwp-uitpas-dev@reporting-224812.iam.gserviceaccount.com" \
-  --project="reporting-224812" \
-  --format=json
-```
-
-🖱️ UI: GCP console > **IAM & Admin** > **Service Accounts** > click the account name.
-
----
-
-**Get full IAM policy for an account:**
-
-⌨️ CLI:
-```bash
-gcloud asset analyze-iam-policy \
-  --project="reporting-224812" \
-  --identity="serviceAccount:uwp-uitpas-dev@reporting-224812.iam.gserviceaccount.com"
-```
-
-🖱️ UI: ?
-
----
-
-**Create a new service account** (name pattern: `uwp-{product}-{dev/prod/test}`):
-
-⌨️ CLI:
-```bash
-gcloud iam service-accounts create "uwp-hackathon-dev" \
-  --project="reporting-224812" \
-  --display-name="UWP Hackathon service account" \
-  --description="UWP service account for messing around on the hackathon"
-```
-
-🖱️ UI: GCP console > **IAM & Admin** > **Service Accounts** > **Create Service Account** — fill in name and description.
-
----
-
-**Grant BigQuery user role on the project:**
-
-⌨️ CLI:
-```bash
-gcloud projects add-iam-policy-binding "reporting-224812" \
-  --member="serviceAccount:uwp-hackathon-dev@reporting-224812.iam.gserviceaccount.com" \
-  --role="roles/bigquery.user"
-```
-
-🖱️ UI: GCP console > **IAM & Admin** > **IAM** > **Grant Access** — add the service account email and assign the `BigQuery User` role.
-
----
-
-**Grant BigQuery editor role on a specific table:**
-
-⌨️ CLI:
-```bash
-bq add-iam-policy-binding \
-  --member="serviceAccount:uwp-hackathon-dev@reporting-224812.iam.gserviceaccount.com" \
-  --role="roles/bigquery.dataEditor" \
-  --table=true \
-  "reporting-224812:uwp_uitpas_dev.uitpas_ticketsales_uwp"
-```
-
-🖱️ UI: BigQuery console > navigate to the table > **Share** > **Add Principal** — add the service account email with the `BigQuery Data Editor` role.
-
----
-
-## 3. Create and configure credentials
+- You can add a new service account by creating a PR in the [infra-repo](https://github.com/cultuurnet/data-GCP-infrastructure/tree/main/infra/applications/uwp)
+- Or you can ask Elia or Bo, they have experience
 
 **Generate a key file:**
-
-⌨️ CLI:
+After these service accounts are created, you can get your keys via a command like so
 ```bash
-gcloud iam service-accounts keys create "./uwp-hackathon-dev-key.json" \
-  --iam-account="uwp-hackathon-dev@reporting-224812.iam.gserviceaccount.com" \
-  --project="reporting-224812"
+gcloud iam service-accounts keys create survey-key-prod.json --iam-account uwp-survey-prod@reporting-224812.iam.gserviceaccount.com
 ```
+Where you need to replace the email address with the email address of the SA you are interested in.
+This generates a `.json`file which are your "credentials". 
+It is those credentials, or "keys" that the dataproduct needs to have in order to function properly.
 
-🖱️ UI: GCP console > **IAM & Admin** > **Service Accounts** > your account > **Keys** > **Add Key** > **Create new key** (JSON format).
+---
 
-> **Warning:** This writes secrets to disk. Remove the key file from the repo after copying the contents.
+## 3. Configure credentials in your dataproduct
 
 Copy the file contents into `secrets.yaml`. If your `dataproduct.yaml` has:
 
