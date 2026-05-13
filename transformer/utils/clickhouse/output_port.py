@@ -1,4 +1,5 @@
 from typing import Sequence
+import warnings
 
 import polars as pl
 
@@ -9,6 +10,13 @@ from ..base_port import BasePort
 
 
 class ClickhouseOutputPort(BasePort):
+    """
+    This is an adapter for clichhouse output port. 
+    It loads important vars like database, auth_username, ... from env vars as properties & all env vars are availble under .env_vars
+    I handles batched inputs
+    Manages the connection to Clickhouse
+    """
+
     DEFAULT_BATCH_SIZE = 500
 
     def __init__(self, port_name: str):
@@ -32,6 +40,8 @@ class ClickhouseOutputPort(BasePort):
             self.table = self.env_vars["TABLE"]
             # self.tcp_port = self.env_vars["TCP_PORT"]
 
+            self.full_table_name = f"{self.database}.{self.table}"
+
         except KeyError as e:
             raise EnvironmentError(
                 f"Missing required environment variable for OutputPort '{self.port_name}': {e.args[0]}"
@@ -46,9 +56,20 @@ class ClickhouseOutputPort(BasePort):
         )
 
     def truncate_table(self):
+        """
+        Empty table
+        """
         self._client.command(f"TRUNCATE TABLE `{self.table}`")
 
     def insert_rows(self, rows: Sequence[tuple], column_names: Sequence[str], batch_size: int = DEFAULT_BATCH_SIZE):
+        """
+        Insert rows as sequence of tuples, not recommended, use insert_polars_dataframe
+        """
+        warnings.warn(
+            "insert_rows is not recommended; use insert_polars_dataframe instead for better performance and memory efficiency.",
+            UserWarning
+        )
+   
         for i in range(0, len(rows), batch_size):
             batch = rows[i:i + batch_size]
             if not batch:
@@ -56,12 +77,18 @@ class ClickhouseOutputPort(BasePort):
             self._client.insert(table=self.table, data=batch, column_names=list(column_names))
 
     def insert_polars_dataframe(self, df: pl.DataFrame, batch_size: int = DEFAULT_BATCH_SIZE):
+        """
+        Insert rows as polars datafram (memory efficient)
+        """
         column_names = df.columns
         for i in range(0, len(df), batch_size):
             batch = df.slice(i, batch_size)
             self._client.insert(table=self.table, data=batch.rows(), column_names=column_names)
 
     def query(self, query: str) -> pl.DataFrame:
+        """
+        Send a Query to output port and get result, can be handy to get latest record for example
+        """
         result = self._client.query(query)
         return pl.DataFrame(result.result_set, schema=result.column_names, orient="row")
 

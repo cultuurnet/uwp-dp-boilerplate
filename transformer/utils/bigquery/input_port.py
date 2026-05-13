@@ -10,26 +10,31 @@ from ..base_port import BasePort
 
 
 class BigQueryInputPort(BasePort):
-    """Input port for reading data from BigQuery.
+    """Adapter for BigQuery
 
-    Requires secretEnvironmentVariables.jsonCredentials to be configured in data-product.yaml.
-    This secret is loaded into the environment as INPUT.{port_name}.jsonCredentials and contains
-    a JSON string with Google service account credentials. Data is returned as Polars DataFrames,
-    which are memory-efficient and recommended for resource-constrained cloud environments.
+    It manages secrets and connections to bigquery
+
+    - jsonCredentials: "name_of_secrets_key" this name (name_of_secrets_key) needs to be set in secrets.yaml
+        - secrets.yaml file: name_of_secrets_key: "JSON string with Google service account credentials" 
+          Can be downloaded GCP console > **IAM & Admin** > **Service Accounts** > your account > **Keys** > **Add Key** > **Create new key** (JSON format)
+    - The env vars that are set in data-products.yaml > inputPorts > {port_name} > environmentVariables are availble in self.env_vars
+
+    Data is returned as Polars DataFrames, which are memory-efficient and recommended for resource-constrained cloud environments.
+    It also has a a paginated query function to get results per page to manage the resource-constrained cloud environments
     """
 
     def __init__(self, port_name: str):
         super().__init__("INPUT", port_name)
-
-        # Load Google service account credentials from secretEnvironmentVariables.jsonCredentials
-        # The secret is loaded into the environment with the key: INPUT.{port_name}.jsonCredentials
         try:
             credentials_map = json.loads(
                 self.env_vars['jsonCredentials']
             )
         except KeyError:
             raise EnvironmentError(
-                f"configure secretEnvironmentVariables: jsonCredentials: to have json secrets for InputPort: {self.port_name}"
+                f"Missing required environment variable 'jsonCredentials' for InputPort: {self.port_name}. "
+                "You must set - jsonCredentials: \"name_of_secrets_key\" in your data-products.yaml file for this InputPort. "
+                "The corresponding secrets.yaml file must also have a key 'name_of_secrets_key' with a Google service account credential JSON string. "
+                "See GCP console > IAM & Admin > Service Accounts > your service account > Keys > Add Key > Create new key (JSON format)."
             )
 
         credentials = service_account.Credentials.from_service_account_info(
@@ -58,9 +63,6 @@ class BigQueryInputPort(BasePort):
         """Execute a query with pagination using LIMIT and OFFSET."""
         paginated_query = f"{query} LIMIT {limit} OFFSET {offset}"
         return self.execute_query(paginated_query)
-
-    def full_table_ref(self, table: str) -> str:
-        return f"`{self.project}.{self.resource}.{table}`"
 
     def __exit__(self):
         if not hasattr(self, "_client"):
